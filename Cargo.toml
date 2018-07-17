@@ -1,0 +1,9 @@
+[package]
+name = "picprog"
+version = "0.1.0"
+authors = ["Youssef Habri <youssef.habri@gmail.com>"]
+
+[dependencies]
+serialport = "3.0.0"
+byteorder = "1"
+structure = "0.1"
