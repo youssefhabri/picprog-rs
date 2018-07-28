@@ -7,7 +7,7 @@ use byteorder::WriteBytesExt;
 use serialport::*;
 
 use utils;
-use chipinfo::ChipInfo;
+use chipinfo::{ChipInfo, Fuse};
 
 const FIRMWARE: [&str; 4] = [
     "K128", "K149-A", "K149-B", "K150"
@@ -58,19 +58,6 @@ impl ProtocolInterface {
         }
 
         return result
-    }
-
-    fn core_bits(&mut self) -> u8 {
-        if !self.vars_set {
-            panic!("vars not set")
-        }
-
-        match self.vars.core_type() {
-            1 | 2 => 16,
-            3 | 5 | 6 | 7 | 8 | 9 | 10 => 14,
-            4 => 12,
-            _ => 0
-        }
     }
 
     fn expect(&mut self, expected: Vec<u8>, timeout: u64) {
@@ -223,7 +210,7 @@ impl ProtocolInterface {
         return result
     }
 
-    pub fn set_programming_voltages_command(&mut self, on: bool) -> bool {
+    pub fn set_programming_voltages(&mut self, on: bool) -> bool {
         let cmd_on = 4;
         let cmd_off = 5;
         let expect: u8;
@@ -241,7 +228,7 @@ impl ProtocolInterface {
     }
 
     fn cycle_programming_voltages(&mut self) -> bool {
-        let cmd = 4;
+        let cmd = 6;
         // self.need_vars()
         self.command_start(cmd);
         let response = self.read(1, 5);
@@ -249,6 +236,51 @@ impl ProtocolInterface {
 
         return response[0] == b'V'
     }
+
+    pub fn program_rom(&mut self, data: Vec<u8>) -> bool {
+        let cmd = 7;
+        // self.need_vars();
+
+        let word_count = data.len();
+        if self.vars.rom_size() < word_count as u16 {
+            panic!("Data too large for PIC ROM");
+        }
+
+        if (word_count * 2) % 32 != 0 {
+            panic!("ROM data must be a multiple of 32 bytes in size.")
+        }
+
+        self.command_start(0);
+        self.set_programming_voltages(true);
+        self.port.write_u8(cmd);
+
+        let word_count_message = word_count as u8;
+        self.port.write_u8(word_count_message);
+
+        self.expect(vec![b'Y'], 5);
+
+        // TODO finish this function
+        // TODO find a way to translate the python try-catch to the rust functional way
+
+        for i in (0..(word_count * 2)).step_by(32) {
+            self.port.write_all(&data[i..(i + 32)]);
+            self.expect(vec![b'Y'], 5);
+        }
+        self.expect(vec![b'P'], 5);
+        // TODO handle try-catch and flushInput
+
+        self.set_programming_voltages(false);
+        self.command_end();
+
+        return true
+
+    }
+
+    fn program_eeprom(&mut self, data: Vec<u8>) {}
+
+    fn program_id_fuses(&mut self) {}
+
+    fn program_calibration(&mut self) {}
 
     pub fn read_rom(&mut self) -> Vec<u8> {
         let cmd = 11;
@@ -258,12 +290,12 @@ impl ProtocolInterface {
         let rom_size = self.vars.rom_size() * 2;
 
         self.command_start(0);
-        self.set_programming_voltages_command(true);
+        self.set_programming_voltages(true);
         self.port.write_u8(cmd);
 
         let response = self.read(rom_size as usize, 5);
 
-        self.set_programming_voltages_command(false);
+        self.set_programming_voltages(false);
         self.command_end();
 
         return response
@@ -276,23 +308,23 @@ impl ProtocolInterface {
         let eeprom_size = self.vars.eeprom_size();
 
         self.command_start(0);
-        self.set_programming_voltages_command(true);
+        self.set_programming_voltages(true);
 
         self.port.write_u8(cmd);
 
         let response = self.read(eeprom_size.into(), 5);
 
-        self.set_programming_voltages_command(false);
+        self.set_programming_voltages(false);
         self.command_end();
 
         return response
     }
 
-    pub fn read_config(&mut self) -> Vec<u8> {
+    pub fn read_configuration(&mut self) -> Vec<u8> {
         let cmd = 13;
 
         self.command_start(0);
-        self.set_programming_voltages_command(true);
+        self.set_programming_voltages(true);
 
         self.port.write_u8(cmd);
         let ack = self.read(1, 5);
@@ -302,7 +334,7 @@ impl ProtocolInterface {
 
         let response = self.read(26, 5);
 
-        self.set_programming_voltages_command(false);
+        self.set_programming_voltages(false);
         self.command_end();
 
         return response

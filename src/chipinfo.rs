@@ -172,7 +172,7 @@ impl ChipInfo {
     pub fn core_bits(&self) -> u32 {
         match self.core_type {
             1 | 2 => 16,
-            3 | 5 | 6 | 7 | 8 | 9 | 10 => 14,
+            3 | 5..10 => 14,
             4 => 16,
             _ => 0
         }
